@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-TW">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,shrink-to-fit=no,user-scalable=no" />
+    <meta name="theme-color" content="#4CAF50" />
+
+    <!-- 您的自訂 PWA 標籤開始 -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="貓咪餵食計算" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512.png" />
+    <!-- 您的自訂 PWA 標籤結束 -->
+
+    <!-- 以下由 Streamlit 自動注入必要內容（不可刪除） -->
+    {{ .Head }}
+  </head>
+  <body>
+    <noscript>你需要啟用 JavaScript 才能使用此應用。</noscript>
+    <div id="root"></div>
+    {{ .Body }}
+
+    <!-- 註冊 Service Worker 的腳本（放在此處確保執行） -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('/service-worker.js')
+            .then(function(registration) {
+              console.log('ServiceWorker 註冊成功');
+            })
+            .catch(function(err) {
+              console.log('ServiceWorker 註冊失敗: ', err);
+            });
+        });
+      }
+    </script>
+  </body>
+</html>
