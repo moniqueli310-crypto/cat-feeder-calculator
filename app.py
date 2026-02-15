@@ -6,28 +6,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # 頁面設定（必須在第一個 st 指令之前）
 st.set_page_config(page_title="貓咪每日餵食計算器", layout="wide")
 
-# ---------- 注入 PWA 支援 ----------
-st.markdown("""
-    <link rel="manifest" href="/manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="貓咪餵食計算">
-    <link rel="apple-touch-icon" href="/icons/icon-192.png">
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/service-worker.js')
-                    .then(function(registration) {
-                        console.log('ServiceWorker 註冊成功：', registration.scope);
-                    })
-                    .catch(function(err) {
-                        console.log('ServiceWorker 註冊失敗：', err);
-                    });
-            });
-        }
-    </script>
-""", unsafe_allow_html=True)
-
+# ---------- 應用標題與說明 ----------
 st.title("🐱 貓咪每日餵食計算器")
 st.markdown("根據貓咪體重與生命階段計算每日熱量需求，並從Google Sheets取得飼料營養資料。")
 
