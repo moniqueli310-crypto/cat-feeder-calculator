@@ -1,4 +1,5 @@
 import streamlit as st
+st.write("營養成分頁面測試")
 import pandas as pd
 import numpy as np
 
