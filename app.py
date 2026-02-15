@@ -139,22 +139,25 @@ if mode == "只吃乾糧":
         st.error("所選乾糧熱量資料有誤")
 
 # ==============================================================================
-# 情境2：只吃濕糧（手動輸入濕糧克數）
+# 情境2：只吃濕糧（自動計算份量）
 # ==============================================================================
 elif mode == "只吃濕糧":
     if wet_foods.empty:
         st.warning("目前無濕糧資料")
         st.stop()
     
+    # 品牌選擇
     wet_brands = get_brand_options(wet_foods)
     selected_wet_brand = st.selectbox("選擇濕糧品牌", wet_brands, key="wet_brand_2")
     
+    # 口味選擇（根據品牌動態更新）
     wet_flavors = get_flavor_options(wet_foods, selected_wet_brand)
     if not wet_flavors:
         st.error("該品牌下無口味資料")
         st.stop()
     selected_wet_flavor = st.selectbox("選擇濕糧口味", wet_flavors, key="wet_flavor_2")
     
+    # 取得選中的資料列
     selected_row = get_food_row_by_brand_flavor(wet_foods, selected_wet_brand, selected_wet_flavor)
     if selected_row is None:
         st.error("無法取得所選濕糧資料")
@@ -165,31 +168,16 @@ elif mode == "只吃濕糧":
         st.error("所選濕糧熱量資料有誤")
         st.stop()
     
-    wet_grams = st.number_input(
-        "請輸入每日餵食濕糧的克數",
-        min_value=0.0,
-        value=100.0,
-        step=10.0,
-        help="根據您的貓咪習慣或包裝建議輸入"
+    # 自動計算每日克數
+    daily_grams = (der * 100) / kcal_per_100g
+    per_meal_grams = daily_grams / meals_per_day
+    
+    st.success(
+        f"建議每日餵食 **{daily_grams:.1f} 克** 的 {selected_wet_brand} - {selected_wet_flavor}\n\n"
+        f"🍽️ 每餐約 **{per_meal_grams:.1f} 克** (每日 {meals_per_day} 餐)"
     )
     
-    wet_kcal_provided = (wet_grams * kcal_per_100g) / 100
-    diff = wet_kcal_provided - der
-    
-    if wet_kcal_provided > der:
-        st.warning(f"⚠️ 濕糧提供的熱量 ({wet_kcal_provided:.0f} kcal) 已超過每日需求 ({der:.0f} kcal)，超出 {diff:.0f} kcal。請考慮減少濕糧。")
-    elif abs(diff) < 1:
-        st.success(f"✅ 濕糧提供的熱量 ({wet_kcal_provided:.0f} kcal) 剛好符合每日需求！")
-    else:
-        st.info(f"ℹ️ 濕糧提供的熱量 ({wet_kcal_provided:.0f} kcal) 少於每日需求，不足 {abs(diff):.0f} kcal。如需補足，請搭配乾糧。")
-    
-    per_meal_grams = wet_grams / meals_per_day
-    st.info(
-        f"**每日濕糧克數**：{wet_grams:.1f} 克\n\n"
-        f"**每餐 ({meals_per_day} 餐)**：{per_meal_grams:.1f} 克"
-    )
-    
-    results.append(("濕糧", selected_row, wet_grams))
+    results.append(("濕糧", selected_row, daily_grams))
 
 # ==============================================================================
 # 情境3：乾糧 + 濕糧（手動輸入濕糧克數）
