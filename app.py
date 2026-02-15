@@ -218,7 +218,7 @@ elif mode == "乾糧 + 濕糧":
     
     results.append(("濕糧", wet_row, wet_grams))
 
-# ---------- 情境4：兩種乾糧 + 濕糧（手動輸入兩種乾糧克數）----------
+# ---------- 情境4：兩種乾糧 + 濕糧（手動輸入濕糧克數，兩種乾糧按重量比例分配）----------
 elif mode == "兩種乾糧 + 濕糧":
     if dry_foods.empty or len(dry_foods) < 2 or wet_foods.empty:
         st.warning("需要至少兩種乾糧和一種濕糧")
@@ -267,72 +267,53 @@ elif mode == "兩種乾糧 + 濕糧":
         key="wet_grams_input2"
     )
     
-    # 輸入兩種乾糧克數
-    st.markdown("**請輸入兩種乾糧的每日餵食克數**")
-    col_grams1, col_grams2 = st.columns(2)
-    with col_grams1:
-        dry1_grams = st.number_input(
-            f"{selected_dry1} (克/日)",
-            min_value=0.0,
-            value=20.0,
-            step=5.0,
-            key="dry1_grams"
-        )
-    with col_grams2:
-        dry2_grams = st.number_input(
-            f"{selected_dry2} (克/日)",
-            min_value=0.0,
-            value=20.0,
-            step=5.0,
-            key="dry2_grams"
-        )
-    
-    # 計算各種糧食提供的熱量
     wet_kcal_provided = (wet_grams * wet_kcal) / 100
-    dry1_kcal_provided = (dry1_grams * dry1_kcal) / 100
-    dry2_kcal_provided = (dry2_grams * dry2_kcal) / 100
-    total_kcal = wet_kcal_provided + dry1_kcal_provided + dry2_kcal_provided
+    remaining_kcal = der - wet_kcal_provided
     
-    diff = total_kcal - der
-    
-    # 顯示結果
-    st.divider()
-    st.subheader("📈 熱量計算結果")
-    
-    col_res1, col_res2, col_res3 = st.columns(3)
-    with col_res1:
-        st.metric("濕糧提供熱量", f"{wet_kcal_provided:.0f} kcal")
-    with col_res2:
-        st.metric(f"{selected_dry1} 提供熱量", f"{dry1_kcal_provided:.0f} kcal")
-    with col_res3:
-        st.metric(f"{selected_dry2} 提供熱量", f"{dry2_kcal_provided:.0f} kcal")
-    
-    st.metric("總熱量", f"{total_kcal:.0f} kcal", delta=f"{diff:+.0f} kcal", delta_color="off")
-    
-    if abs(diff) < 1:
-        st.success("✅ 總熱量完全符合每日建議需求！")
-    elif diff > 0:
-        st.warning(f"⚠️ 總熱量超出每日需求 {diff:.0f} kcal，請考慮減少餵食量。")
+    if remaining_kcal < 0:
+        st.error(f"❌ 濕糧提供的熱量 ({wet_kcal_provided:.0f} kcal) 已超過總需求 ({der:.0f} kcal)，無法搭配乾糧。請減少濕糧。")
+        st.stop()
+    elif remaining_kcal == 0:
+        st.warning("⚠️ 濕糧提供的熱量剛好等於總需求，不需要額外餵食乾糧。")
+        dry1_daily = 0
+        dry2_daily = 0
     else:
-        st.info(f"ℹ️ 總熱量不足每日需求 {abs(diff):.0f} kcal，請考慮增加餵食量。")
+        st.markdown("**設定兩種乾糧的重量比例**")
+        st.caption("請指定乾糧 A 佔乾糧總重量的百分比，乾糧 B 將佔剩餘比例。")
+        weight_pct = st.slider(f"{selected_dry1} 佔乾糧總重量百分比 (%)", 0, 100, 50, step=1)
+        alpha = weight_pct / 100  # 乾糧A的重量佔比
+        
+        # 計算加權平均熱量密度 (kcal/100g)
+        weighted_avg_kcal = alpha * dry1_kcal + (1 - alpha) * dry2_kcal
+        if weighted_avg_kcal <= 0:
+            st.error("計算錯誤：加權平均熱量無效")
+            st.stop()
+        
+        # 總乾糧重量 (克)
+        total_dry_grams = (remaining_kcal * 100) / weighted_avg_kcal
+        
+        dry1_daily = alpha * total_dry_grams
+        dry2_daily = (1 - alpha) * total_dry_grams
+        
+        # 驗算提供的熱量（因浮點數可能有小誤差）
+        check_kcal = (dry1_daily * dry1_kcal / 100) + (dry2_daily * dry2_kcal / 100)
+        if abs(check_kcal - remaining_kcal) > 0.5:
+            st.warning(f"⚠️ 計算有小誤差，建議人工確認。驗算熱量：{check_kcal:.1f} kcal，目標：{remaining_kcal:.1f} kcal")
+        
+        dry1_per_meal = dry1_daily / meals_per_day
+        dry2_per_meal = dry2_daily / meals_per_day
+        
+        st.success(
+            f"**濕糧 ({selected_wet})**：每日 **{wet_grams:.1f} 克** (每餐 **{wet_grams/meals_per_day:.1f} 克**)\n\n"
+            f"**乾糧 A ({selected_dry1})**：每日 **{dry1_daily:.1f} 克** (每餐 **{dry1_per_meal:.1f} 克**)\n\n"
+            f"**乾糧 B ({selected_dry2})**：每日 **{dry2_daily:.1f} 克** (每餐 **{dry2_per_meal:.1f} 克**)\n\n"
+            f"剩餘熱量：{remaining_kcal:.0f} kcal，乾糧總重：{total_dry_grams:.1f} 克，"
+            f"乾糧 A 重量佔比：{weight_pct}%"
+        )
+        results.append(("乾糧", dry1_row, dry1_daily))
+        results.append(("乾糧", dry2_row, dry2_daily))
     
-    # 計算每餐克數
-    per_meal_wet = wet_grams / meals_per_day
-    per_meal_dry1 = dry1_grams / meals_per_day
-    per_meal_dry2 = dry2_grams / meals_per_day
-    
-    st.markdown("---")
-    st.subheader("🍽️ 每餐建議餵食量")
-    st.markdown(
-        f"**濕糧**：每日 {wet_grams:.1f} 克 → 每餐 **{per_meal_wet:.1f} 克**\n\n"
-        f"**乾糧 A**：每日 {dry1_grams:.1f} 克 → 每餐 **{per_meal_dry1:.1f} 克**\n\n"
-        f"**乾糧 B**：每日 {dry2_grams:.1f} 克 → 每餐 **{per_meal_dry2:.1f} 克**"
-    )
-    
-    # 記錄用於營養成分顯示
     results.append(("濕糧", wet_row, wet_grams))
-    results.append(("乾糧", dry1_row, dry1_grams))
-    results.append(("乾糧", dry2_row, dry2_grams))
     
 # ---------- 顯示營養成分 ----------
 if results:
