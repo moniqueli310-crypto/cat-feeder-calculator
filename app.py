@@ -63,6 +63,7 @@ with st.sidebar:
     
     st.divider()
     meals_per_day = st.number_input("每日餐數", min_value=1, max_value=10, value=2, step=1)
+    st.session_state['meals_per_day'] = meals_per_day   # 
     st.caption(f"每餐將依此數平分每日總量")
     st.divider()
     st.caption("資料來源：Google Sheets (僅所有者可編輯)")
@@ -356,7 +357,7 @@ if results:
     st.info("✅ 計算完成！點擊左側導覽列的 **📊 營養成分** 查看詳細營養分析。")
     # 可選：加上一個按鈕快速跳轉
     if st.button("👉 前往營養成分頁面"):
-        st.switch_page("pages/2_📊_營養成分.py")
+        st.switch_page("pages/2_nutrition.py")
 else:
     st.session_state.selected_foods = []
 
