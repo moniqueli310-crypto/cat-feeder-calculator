@@ -1,106 +1,195 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go # 如果沒有安裝 plotly，可以用 st.bar_chart 代替
+import plotly.graph_objects as go
 
-st.set_page_config(page_title="詳細營養分析", layout="wide")
+# ==========================================
+# 👇 請在這裡再次貼上你的 Google Sheets CSV 連結
+# (為了確保直接開啟此頁面也能讀取資料，建議這邊也放連結)
+# ==========================================
+DRY_FOOD_URL = "請貼上_乾糧_的_CSV_連結"
+WET_FOOD_URL = "請貼上_濕糧_的_CSV_連結"
+# ==========================================
 
-st.title("📊 每日營養攝取分析")
+st.set_page_config(page_title="貓糧營養資料庫", layout="wide")
+st.title("📚 貓糧營養資料庫")
+st.markdown("查詢各品牌貓糧的詳細營養成份、乾物比 (DM) 與代謝能 (ME) 分析。")
 
-# ---------- 1. 檢查是否有資料傳過來 ----------
-if 'selected_foods_data' not in st.session_state or not st.session_state['selected_foods_data']:
-    st.warning("⚠️ 尚未選擇飼料，請先回首頁計算。")
-    if st.button("🏠 返回計算器"):
-        st.switch_page("Home.py") # 確保你的主程式檔名正確
-    st.stop()
+# ---------- 資料讀取函數 (與首頁相同) ----------
+@st.cache_data(ttl=600)
+def load_food_data():
+    dry_data = pd.DataFrame()
+    wet_data = pd.DataFrame()
+    try:
+        # 嘗試使用 pyodide (stlite 瀏覽器環境)
+        try:
+            from pyodide.http import open_url
+            if DRY_FOOD_URL.startswith("http"):
+                dry_data = pd.read_csv(open_url(DRY_FOOD_URL))
+            if WET_FOOD_URL.startswith("http"):
+                wet_data = pd.read_csv(open_url(WET_FOOD_URL))
+        except ImportError:
+            # 本地開發環境
+            if DRY_FOOD_URL.startswith("http"):
+                dry_data = pd.read_csv(DRY_FOOD_URL)
+            if WET_FOOD_URL.startswith("http"):
+                wet_data = pd.read_csv(WET_FOOD_URL)
 
-# 取得資料
-results = st.session_state['selected_foods_data']
-cat_weight = st.session_state.get('cat_weight', 4.0)
+        # 清理欄位
+        for df in [dry_data, wet_data]:
+            if not df.empty:
+                df.columns = df.columns.str.strip()
+                # 確保數值欄位是數字
+                cols = ['蛋白質(%)', '脂肪(%)', '水分(%)', '纖維(%)', '灰質(%)', 
+                        '磷(%)', '鈣(%)', '碳水化合物(%)', '熱量(kcal/100g)']
+                for c in cols:
+                    if c in df.columns:
+                        df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+        
+        return dry_data, wet_data
+    except Exception as e:
+        st.error(f"資料讀取失敗: {e}")
+        return pd.DataFrame(), pd.DataFrame()
 
-# ---------- 2. 計算總營養攝取量 ----------
-# 定義我們要分析的營養欄位
-nutrients = ['蛋白質(%)', '脂肪(%)', '纖維(%)', '灰質(%)', '磷(%)', '鈣(%)', '碳水化合物(%)']
-total_nutrients_grams = {n: 0.0 for n in nutrients}
-total_grams = 0
-total_kcal = 0
+dry_foods, wet_foods = load_food_data()
 
-st.subheader("已選飼料組合")
-
-# 顯示飼料清單並累加數值
-display_list = []
-for food_type, row, grams in results:
-    display_list.append({
-        "類型": food_type,
-        "品牌": row['品牌'],
-        "口味": row['口味'],
-        "餵食量 (g)": f"{grams:.1f}"
-    })
+# ---------- 側邊欄篩選 ----------
+with st.sidebar:
+    st.header("🔍 篩選條件")
+    food_type = st.radio("選擇種類", ["乾糧", "濕糧"])
     
-    total_grams += grams
-    # 計算該項食物提供的總熱量
-    if '熱量(kcal/100g)' in row:
-        total_kcal += (row['熱量(kcal/100g)'] * grams) / 100
+    # 根據種類選擇資料來源
+    df = dry_foods if food_type == "乾糧" else wet_foods
+    
+    if df.empty:
+        st.warning("讀取不到資料，請檢查 CSV 連結。")
+        st.stop()
+        
+    all_brands = sorted(df['品牌'].unique())
+    selected_brand = st.selectbox("選擇品牌", all_brands)
+    
+    # 過濾出該品牌的口味
+    brand_df = df[df['品牌'] == selected_brand]
+    all_flavors = sorted(brand_df['口味'].unique())
+    selected_flavor = st.selectbox("選擇口味", all_flavors)
 
-    # 累加各項營養素的絕對克數 (例如：吃了100g飼料，蛋白質40%，就是攝取了40g蛋白質)
-    for n in nutrients:
-        if n in row:
-            # 處理可能出現的非數值資料 (Pandas read 之後有時會變成字串)
-            try:
-                val = float(row[n])
-                total_nutrients_grams[n] += (val * grams) / 100
-            except:
-                pass # 忽略無法轉成數字的欄位
+# 取得選定的那一行資料
+row = brand_df[brand_df['口味'] == selected_flavor].iloc[0]
 
-st.table(pd.DataFrame(display_list))
+# ---------- 核心計算邏輯 ----------
+# 1. 取得基本數值
+moisture = row.get('水分(%)', 0)
+protein = row.get('蛋白質(%)', 0)
+fat = row.get('脂肪(%)', 0)
+carbs = row.get('碳水化合物(%)', 0)
+fiber = row.get('纖維(%)', 0)
+ash = row.get('灰質(%)', 0)
+phos = row.get('磷(%)', 0)
+cal = row.get('鈣(%)', 0)
+kcal_per_100g = row.get('熱量(kcal/100g)', 0)
 
-# ---------- 3. 顯示分析結果 ----------
+# 2. 計算乾物比 (Dry Matter Basis)
+# 公式: 營養素 / (100 - 水分) * 100
+dry_matter_content = 100 - moisture
+if dry_matter_content <= 0: dry_matter_content = 1 # 避免除以0
+dm_protein = (protein / dry_matter_content) * 100
+dm_fat = (fat / dry_matter_content) * 100
+dm_carbs = (carbs / dry_matter_content) * 100
+dm_phos = (phos / dry_matter_content) * 100
+dm_cal = (cal / dry_matter_content) * 100
 
-# 計算「乾物重 (Dry Matter Basis)」或「代謝能佔比 (ME%)」會更專業，
-# 但這裡先做最直觀的「每日攝取總重百分比」分析
+# 3. 計算代謝能比 (ME Ratio / Caloric Distribution)
+# 使用 Modified Atwater 係數 (貓糧常用): 蛋白質3.5, 脂肪8.5, 碳水3.5
+kcal_p = protein * 3.5
+kcal_f = fat * 8.5
+kcal_c = carbs * 3.5
+total_est_kcal = kcal_p + kcal_f + kcal_c
+
+if total_est_kcal > 0:
+    me_p = (kcal_p / total_est_kcal) * 100
+    me_f = (kcal_f / total_est_kcal) * 100
+    me_c = (kcal_c / total_est_kcal) * 100
+else:
+    me_p = me_f = me_c = 0
+
+# 4. 鈣磷比
+ca_p_ratio = f"{cal/phos:.2f} : 1" if phos > 0 else "無法計算"
+
+# ---------- 顯示介面 ----------
+
+st.header(f"{selected_brand} - {selected_flavor}")
+
+# --- 第一區塊：主要營養指標 (三欄佈局) ---
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.subheader("💧 基本數值 (As Fed)")
+    st.caption("包裝標示/餵食狀態")
+    base_df = pd.DataFrame({
+        "營養素": ["蛋白質", "脂肪", "碳水化合物", "水分", "纖維", "灰質"],
+        "含量 (%)": [f"{protein}%", f"{fat}%", f"{carbs}%", f"{moisture}%", f"{fiber}%", f"{ash}%"]
+    })
+    st.dataframe(base_df, hide_index=True, use_container_width=True)
+
+with col2:
+    st.subheader("🍂 乾物比 (DM Basis)")
+    st.caption("扣除水分後的真實營養濃度")
+    dm_df = pd.DataFrame({
+        "營養素": ["蛋白質 (DM)", "脂肪 (DM)", "碳水化合物 (DM)", "磷 (DM)", "鈣 (DM)"],
+        "含量 (%)": [f"{dm_protein:.1f}%", f"{dm_fat:.1f}%", f"{dm_carbs:.1f}%", f"{dm_phos:.2f}%", f"{dm_cal:.2f}%"]
+    })
+    st.dataframe(dm_df, hide_index=True, use_container_width=True)
+
+with col3:
+    st.subheader("🔥 熱量分析 (ME Ratio)")
+    st.caption("熱量來源佔比 (蛋白質/脂肪/碳水)")
+    
+    # 繪製甜甜圈圖
+    labels = ['蛋白質', '脂肪', '碳水化合物']
+    values = [me_p, me_f, me_c]
+    colors = ['#FF9999', '#FFCC99', '#99CCFF'] # 粉紅、粉橘、淺藍
+    
+    fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.4, marker=dict(colors=colors))])
+    fig.update_layout(
+        margin=dict(t=0, b=0, l=0, r=0), 
+        height=180,
+        showlegend=False,
+        annotations=[dict(text=f'{int(kcal_per_100g)}<br>kcal', x=0.5, y=0.5, font_size=16, showarrow=False)]
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # 顯示文字數據
+    st.text(f"蛋白質熱量比: {me_p:.1f}%")
+    st.text(f"脂肪熱量比:   {me_f:.1f}%")
+    st.text(f"碳水熱量比:   {me_c:.1f}%")
 
 st.divider()
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("每日總攝取重量", f"{total_grams:.1f} g")
-with col2:
-    st.metric("每日總熱量", f"{total_kcal:.0f} kcal")
-with col3:
-    st.metric("貓咪體重", f"{cat_weight} kg")
+# --- 第二區塊：礦物質與關鍵指標 ---
+m1, m2, m3, m4 = st.columns(4)
+with m1:
+    st.metric("磷 (Phosphorus)", f"{phos}%", help="腎臟病貓需注意此數值")
+with m2:
+    st.metric("鈣 (Calcium)", f"{cal}%")
+with m3:
+    st.metric("鈣磷比 (Ca:P)", ca_p_ratio, help="理想值約為 1.1:1 ~ 1.4:1")
+with m4:
+    st.metric("熱量密度", f"{kcal_per_100g:.0f} kcal/100g")
 
-st.subheader("營養成分佔比 (As Fed / 餵食狀態)")
+# --- 額外資訊 (如果 CSV 有更多欄位) ---
+# 檢查是否有牛磺酸或其他欄位
+extra_cols = []
+for col in row.index:
+    if col not in ['品牌', '口味', '蛋白質(%)', '脂肪(%)', '水分(%)', '纖維(%)', '灰質(%)', 
+                   '磷(%)', '鈣(%)', '碳水化合物(%)', '熱量(kcal/100g)']:
+        val = row[col]
+        if str(val) != "" and str(val) != "0" and str(val) != "0.0":
+            extra_cols.append((col, val))
 
-# 準備圖表資料
-labels = [n.replace('(%)', '') for n in total_nutrients_grams.keys()]
-values = [total_nutrients_grams[n] for n in total_nutrients_grams.keys()]
-# 計算水分 (總重 - 所有固體營養素) *粗略估算
-water_content = total_grams - sum(values)
-if water_content > 0:
-    labels.append("水分估算")
-    values.append(water_content)
+if extra_cols:
+    st.markdown("### 📝 其他標示成分")
+    ex_cols = st.columns(len(extra_cols))
+    for i, (col_name, val) in enumerate(extra_cols):
+        with ex_cols[i]:
+            st.metric(col_name, val)
 
-# 使用 Plotly 畫圓餅圖 (如果不熟悉 Plotly，可以用 st.dataframe 直接顯示數值)
-fig = go.Figure(data=[go.Pie(labels=labels, values=values, hole=.3)])
-fig.update_layout(margin=dict(t=0, b=0, l=0, r=0), height=300)
-st.plotly_chart(fig, use_container_width=True)
-
-# 顯示詳細數值表
-st.caption("各營養素預估攝取克數：")
-df_analysis = pd.DataFrame([total_nutrients_grams]).T
-df_analysis.columns = ['攝取克數 (g)']
-df_analysis['佔總重比例 (%)'] = (df_analysis['攝取克數 (g)'] / total_grams * 100).round(2)
-st.dataframe(df_analysis)
-
-# ---------- 4. 額外功能：磷含量警示 (選做) ----------
-phos_g = total_nutrients_grams.get('磷(%)', 0)
-if phos_g > 0 and total_kcal > 0:
-    # 腎貓通常看 mg/100kcal
-    phos_mg_per_100kcal = (phos_g * 1000) / (total_kcal / 100)
-    st.info(f"💡 磷含量分析：約 **{phos_mg_per_100kcal:.0f} mg / 100kcal**")
-    if phos_mg_per_100kcal > 250:
-        st.caption("註：一般成貓標準。若為腎臟病貓，建議諮詢獸醫是否需控制在 250mg/100kcal 以下。")
-
-# 返回按鈕
-st.markdown("---")
-if st.button("⬅️ 返回修改餵食計畫"):
-    st.switch_page("Home.py")
+st.caption("註：ME熱量比採用 Modified Atwater (3.5/8.5/3.5) 估算，可能與官方標示略有出入。")
