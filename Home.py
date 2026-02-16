@@ -353,14 +353,39 @@ elif mode == "兩種乾糧 + 濕糧":
         results.append(("乾糧", dry2_row, dry2_daily))
     results.append(("濕糧", wet_row, wet_grams))
 
-# ---------- 將結果存入 session_state ----------
+# ---------- 顯示與儲存結果 ----------
+st.markdown("---")
+
 if results:
-    st.session_state.selected_foods = results
-    st.info("✅ 計算完成！點擊下方按鈕查看詳細營養分析。")
-    if st.button("👉 前往營養成分頁面"):
-        st.switch_page("pages/2_nutrition.py")
+    # 建立一個乾淨的摘要 DataFrame 用於顯示
+    summary_data = []
+    for food_type, row, grams in results:
+        summary_data.append({
+            "種類": food_type,
+            "品牌": row['品牌'],
+            "口味": row['口味'],
+            "餵食量 (g)": f"{grams:.1f}",
+            "熱量 (kcal)": f"{(grams * row['熱量(kcal/100g)'] / 100):.1f}"
+        })
+    
+    st.subheader("📋 建議餵食清單")
+    st.table(pd.DataFrame(summary_data))
+
+    # 1. 先將計算結果存入 session_state
+    # 我們儲存原始 row 資料以便下一頁進行詳細營養計算
+    st.session_state['selected_foods_data'] = results 
+    st.session_state['cat_weight'] = weight  # 順便傳遞貓咪體重，下一頁可能用到
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        # 2. 使用按鈕觸發跳轉
+        if st.button("👉 查看詳細營養成份分析", type="primary", use_container_width=True):
+            st.switch_page("pages/2_nutrition.py")
 else:
-    st.session_state.selected_foods = []
+    # 如果沒有結果，清空 session state 避免髒資料
+    if 'selected_foods_data' in st.session_state:
+        del st.session_state['selected_foods_data']
+    st.info("👈 請在左側/上方選擇飼料以開始計算")
 
 st.markdown("---")
-st.caption("📌 所有計算僅供參考，請依貓咪實際狀況調整。資料來源為您自行維護的Google Sheets。")
+st.caption("📌 所有計算僅供參考，請依貓咪實際狀況調整。")
