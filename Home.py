@@ -8,7 +8,7 @@ import pandas as pd
 st.set_page_config(
     page_title="貓咪全方位助手", 
     layout="wide", 
-    page_icon="icon.png"  # 👈 關鍵：這裡填你的圖片檔名
+    page_icon="https://raw.githubusercontent.com/moniqueli310-crypto/cat-feeder-calculator/main/icon.png"
 )
 
 # ==========================================
