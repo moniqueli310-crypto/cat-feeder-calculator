@@ -1,170 +1,221 @@
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="貓咪每日餵食計算器", layout="wide")
+# 設定網頁標題 (必須在第一行)
+st.set_page_config(page_title="貓咪全方位助手", layout="wide", page_icon="🐱")
 
-st.title("🐱 貓咪每日餵食計算器")
-st.markdown("根據貓咪體重與生命階段計算每日熱量需求。")
-
-# ---------- 讀取本地資料 (極速版) ----------
+# ==========================================
+# 1. 資料讀取 (全域共用，只讀一次)
+# ==========================================
 @st.cache_data(ttl=600)
-def load_food_data():
+def load_data():
+    dry = pd.DataFrame()
+    wet = pd.DataFrame()
     try:
-        # 直接讀取本地檔案，速度最快
-        # 只要 index.html 有設定 files，這裡就能直接讀到
-        dry_data = pd.read_csv("dry_food.csv")
-        wet_data = pd.read_csv("wet_food.csv")
-
+        dry = pd.read_csv("dry_food.csv")
+        wet = pd.read_csv("wet_food.csv")
+        
         # 資料清理
-        for df in [dry_data, wet_data]:
+        for df in [dry, wet]:
             if not df.empty:
                 df.columns = df.columns.str.strip()
                 cols = ['熱量(kcal/100g)', '蛋白質(%)', '脂肪(%)', '水分(%)', '纖維(%)', 
-                        '灰質(%)', '磷(%)', '鈣(%)', '牛磺酸(%)', '碳水化合物(%)']
+                        '灰質(%)', '磷(%)', '鈣(%)', '碳水化合物(%)']
                 for c in cols:
                     if c in df.columns:
-                        df[c] = pd.to_numeric(df[c], errors='coerce')
-        
-        return dry_data, wet_data
+                        df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+    except:
+        pass
+    return dry, wet
 
-    except Exception as e:
-        st.error(f"讀取資料失敗: {e}")
-        st.info("請確認 dry_food.csv 和 wet_food.csv 已上傳到 GitHub 並且在 index.html 設定了 files。")
-        return pd.DataFrame(), pd.DataFrame()
+# 初始化 Session State
+if 'dry_foods' not in st.session_state:
+    d, w = load_data()
+    st.session_state['dry_foods'] = d
+    st.session_state['wet_foods'] = w
 
-dry_foods, wet_foods = load_food_data()
+dry_foods = st.session_state['dry_foods']
+wet_foods = st.session_state['wet_foods']
 
-if dry_foods.empty and wet_foods.empty:
-    st.stop()
-
-# ---------- 側邊欄 (貓咪資料) ----------
+# ==========================================
+# 2. 側邊欄導航 (取代多頁面)
+# ==========================================
 with st.sidebar:
-    st.header("🐈 貓咪資料")
-    weight = st.number_input("體重 (kg)", min_value=0.5, max_value=20.0, value=4.0, step=0.1)
+    st.title("🐱 貓咪全方位助手")
+    page = st.radio("選擇功能", ["🧮 餵食計算器", "📚 營養資料庫", "🛠️ 資料管理"], label_visibility="collapsed")
+    st.divider()
+
+# ==========================================
+# 3. 功能 A: 餵食計算器
+# ==========================================
+if page == "🧮 餵食計算器":
+    st.title("🧮 貓咪每日餵食計算器")
     
-    factor_options = {
-        "幼貓 (<4個月)": 2.5,
-        "幼貓 (4-12個月)": 2.0,
-        "成年貓 (絕育)": 1.2,
-        "成年貓 (未絕育)": 1.4,
-        "活躍/戶外貓": 1.6,
-        "老年貓": 1.1,
-        "肥胖傾向/減肥": 0.8
-    }
-    life_stage = st.selectbox("生命階段 / 活動量", list(factor_options.keys()))
-    factor = factor_options[life_stage]
+    if dry_foods.empty and wet_foods.empty:
+        st.error("讀取不到資料，請先至「資料管理」或檢查 CSV 檔案。")
+        st.stop()
+
+    with st.expander("🐈 設定貓咪資料", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            weight = st.number_input("體重 (kg)", 0.5, 20.0, 4.0, 0.1)
+            meals = st.number_input("每日餐數", 1, 10, 2)
+        with col2:
+            factors = {
+                "幼貓 (<4個月)": 2.5, "幼貓 (4-12個月)": 2.0, "成年貓 (絕育)": 1.2,
+                "成年貓 (未絕育)": 1.4, "活躍/戶外貓": 1.6, "老年貓": 1.1, "減肥中": 0.8
+            }
+            stage = st.selectbox("生命階段", list(factors.keys()))
+            factor = factors[stage]
+            
+        rer = 70 * (weight ** 0.75)
+        der = rer * factor
+        st.metric("每日熱量需求 (DER)", f"{der:.0f} kcal")
+
+    mode = st.radio("餵食模式", ["只吃乾糧", "只吃濕糧", "乾糧 + 濕糧", "兩種乾糧 + 濕糧"], horizontal=True)
+    st.divider()
+
+    # --- 輔助函式 ---
+    def get_opts(df): return sorted(df['品牌'].unique()) if not df.empty else []
+    def get_flavs(df, b): return df[df['品牌']==b]['口味'].tolist() if not df.empty else []
+    def get_row(df, b, f): 
+        res = df[(df['品牌']==b) & (df['口味']==f)]
+        return res.iloc[0] if not res.empty else None
+
+    # --- 計算邏輯 (簡化顯示) ---
+    if mode == "只吃乾糧":
+        b = st.selectbox("品牌", get_opts(dry_foods))
+        f = st.selectbox("口味", get_flavs(dry_foods, b))
+        row = get_row(dry_foods, b, f)
+        if row is not None:
+            kcal = row['熱量(kcal/100g)']
+            daily = (der*100)/kcal if kcal>0 else 0
+            st.success(f"建議每日：**{daily:.1f}g** (每餐 {daily/meals:.1f}g)")
+
+    elif mode == "只吃濕糧":
+        b = st.selectbox("品牌", get_opts(wet_foods))
+        f = st.selectbox("口味", get_flavs(wet_foods, b))
+        row = get_row(wet_foods, b, f)
+        if row is not None:
+            kcal = row['熱量(kcal/100g)']
+            daily = (der*100)/kcal if kcal>0 else 0
+            st.success(f"建議每日：**{daily:.1f}g** (每餐 {daily/meals:.1f}g)")
+
+    elif mode == "乾糧 + 濕糧":
+        c1, c2 = st.columns(2)
+        with c1:
+            db = st.selectbox("乾糧品牌", get_opts(dry_foods))
+            df_ = st.selectbox("乾糧口味", get_flavs(dry_foods, db))
+        with c2:
+            wb = st.selectbox("濕糧品牌", get_opts(wet_foods))
+            wf = st.selectbox("濕糧口味", get_flavs(wet_foods, wb))
+        
+        d_row = get_row(dry_foods, db, df_)
+        w_row = get_row(wet_foods, wb, wf)
+        
+        if d_row is not None and w_row is not None:
+            w_g = st.number_input("濕糧重量 (g)", 0.0, 500.0, 100.0, 10.0)
+            w_k = w_row['熱量(kcal/100g)']
+            provided = (w_g * w_k) / 100
+            remain = der - provided
+            if remain < 0: st.error("濕糧熱量已超標！")
+            else:
+                d_k = d_row['熱量(kcal/100g)']
+                d_g = (remain*100)/d_k if d_k>0 else 0
+                st.success(f"濕糧：**{w_g:.1f}g** + 乾糧：**{d_g:.1f}g**")
+
+    elif mode == "兩種乾糧 + 濕糧":
+        c1, c2, c3 = st.columns(3)
+        with c1: 
+            d1b = st.selectbox("乾糧A", get_opts(dry_foods))
+            d1f = st.selectbox("口味", get_flavs(dry_foods, d1b), key="d1")
+        with c2:
+            d2b = st.selectbox("乾糧B", get_opts(dry_foods))
+            d2f = st.selectbox("口味", get_flavs(dry_foods, d2b), key="d2")
+        with c3:
+            wb = st.selectbox("濕糧", get_opts(wet_foods))
+            wf = st.selectbox("口味", get_flavs(wet_foods, wb), key="w")
+            
+        d1r = get_row(dry_foods, d1b, d1f)
+        d2r = get_row(dry_foods, d2b, d2f)
+        wr = get_row(wet_foods, wb, wf)
+        
+        if all([d1r is not None, d2r is not None, wr is not None]):
+            w_g = st.number_input("濕糧重量 (g)", 80.0)
+            ratio = st.slider(f"{d1b} 比例 (%)", 0, 100, 50)
+            provided = (w_g * wr['熱量(kcal/100g)']) / 100
+            remain = der - provided
+            if remain < 0: st.error("熱量超標")
+            else:
+                avg_k = (ratio/100)*d1r['熱量(kcal/100g)'] + (1-ratio/100)*d2r['熱量(kcal/100g)']
+                total_d = (remain*100)/avg_k if avg_k>0 else 0
+                st.success(f"濕糧：**{w_g:.1f}g**\n乾糧A：**{total_d*(ratio/100):.1f}g**\n乾糧B：**{total_d*(1-ratio/100):.1f}g**")
+
+# ==========================================
+# 4. 功能 B: 營養資料庫
+# ==========================================
+elif page == "📚 營養資料庫":
+    st.title("📚 貓糧營養資料庫")
     
-    rer = 70 * (weight ** 0.75)
-    der = rer * factor
-    st.metric("每日建議熱量", f"{der:.0f} kcal")
+    type_ = st.radio("種類", ["乾糧", "濕糧"], horizontal=True)
+    df = dry_foods if type_ == "乾糧" else wet_foods
+    
+    if df.empty: st.stop()
+    
+    c1, c2 = st.columns(2)
+    with c1: b = st.selectbox("品牌", sorted(df['品牌'].unique()))
+    with c2: f = st.selectbox("口味", sorted(df[df['品牌']==b]['口味'].unique()))
+    
+    row = df[(df['品牌']==b) & (df['口味']==f)].iloc[0]
+    
+    # 計算邏輯
+    mst = row.get('水分(%)', 0)
+    prot = row.get('蛋白質(%)', 0)
+    fat = row.get('脂肪(%)', 0)
+    carb = row.get('碳水化合物(%)', 0)
+    phos = row.get('磷(%)', 0)
+    cal = row.get('鈣(%)', 0)
+    kcal = row.get('熱量(kcal/100g)', 0)
+    
+    dm = 100 - mst
+    if dm <= 0: dm = 1
+    
+    kp, kf, kc = prot*3.5, fat*8.5, carb*3.5
+    tot_k = kp + kf + kc
+    mep = (kp/tot_k*100) if tot_k>0 else 0
+    mef = (kf/tot_k*100) if tot_k>0 else 0
+    mec = (kc/tot_k*100) if tot_k>0 else 0
     
     st.divider()
-    meals_per_day = st.number_input("每日餐數", min_value=1, max_value=10, value=2, step=1)
-    st.caption(f"每餐將依此數平分每日總量")
-
-# ---------- 模式選擇 ----------
-mode = st.radio(
-    "選擇餵食模式",
-    ["只吃乾糧", "只吃濕糧", "乾糧 + 濕糧", "兩種乾糧 + 濕糧"],
-    horizontal=True
-)
-
-# ---------- 輔助函數 ----------
-def get_brand_options(df):
-    if df.empty: return []
-    return sorted(df['品牌'].dropna().unique())
-
-def get_flavor_options(df, brand):
-    if df.empty or not brand: return []
-    return df[df['品牌'] == brand]['口味'].tolist()
-
-def get_food_row_by_brand_flavor(df, brand, flavor):
-    if df.empty: return None
-    row = df[(df['品牌'] == brand) & (df['口味'] == flavor)]
-    return row.iloc[0] if len(row) > 0 else None
-
-# ---------- 計算邏輯 ----------
-if mode == "只吃乾糧":
-    if not dry_foods.empty:
-        brand = st.selectbox("選擇乾糧品牌", get_brand_options(dry_foods))
-        flavor = st.selectbox("選擇乾糧口味", get_flavor_options(dry_foods, brand))
-        row = get_food_row_by_brand_flavor(dry_foods, brand, flavor)
-        if row is not None:
-            kcal = row['熱量(kcal/100g)']
-            if kcal > 0:
-                daily = (der * 100) / kcal
-                st.success(f"建議每日：**{daily:.1f}g** (每餐 {daily/meals_per_day:.1f}g)")
-
-elif mode == "只吃濕糧":
-    if not wet_foods.empty:
-        brand = st.selectbox("選擇濕糧品牌", get_brand_options(wet_foods))
-        flavor = st.selectbox("選擇濕糧口味", get_flavor_options(wet_foods, brand))
-        row = get_food_row_by_brand_flavor(wet_foods, brand, flavor)
-        if row is not None:
-            kcal = row['熱量(kcal/100g)']
-            if kcal > 0:
-                daily = (der * 100) / kcal
-                st.success(f"建議每日：**{daily:.1f}g** (每餐 {daily/meals_per_day:.1f}g)")
-
-elif mode == "乾糧 + 濕糧":
-    c1, c2 = st.columns(2)
-    with c1:
-        d_brand = st.selectbox("乾糧品牌", get_brand_options(dry_foods))
-        d_flavor = st.selectbox("乾糧口味", get_flavor_options(dry_foods, d_brand))
-        d_row = get_food_row_by_brand_flavor(dry_foods, d_brand, d_flavor)
-    with c2:
-        w_brand = st.selectbox("濕糧品牌", get_brand_options(wet_foods))
-        w_flavor = st.selectbox("濕糧口味", get_flavor_options(wet_foods, w_brand))
-        w_row = get_food_row_by_brand_flavor(wet_foods, w_brand, w_flavor)
+    st.subheader(f"{b} - {f}")
     
-    if d_row is not None and w_row is not None:
-        wet_g = st.number_input("每日濕糧 (g)", value=100.0, step=10.0)
-        w_k = w_row['熱量(kcal/100g)']
-        d_k = d_row['熱量(kcal/100g)']
-        
-        provided = (wet_g * w_k) / 100
-        remain = der - provided
-        
-        if remain < 0:
-            st.error(f"濕糧熱量已超標！")
-        else:
-            dry_g = (remain * 100) / d_k if d_k > 0 else 0
-            st.success(f"濕糧：**{wet_g:.1f}g** + 乾糧：**{dry_g:.1f}g**")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.caption("💧 基本 (As Fed)")
+        st.dataframe(pd.DataFrame({"%": [prot, fat, carb, mst, phos, cal]}, 
+                     index=["蛋白", "脂肪", "碳水", "水分", "磷", "鈣"]).T, hide_index=True)
+    with col2:
+        st.caption("🍂 乾物比 (DM)")
+        st.dataframe(pd.DataFrame({"%": [prot/dm*100, fat/dm*100, carb/dm*100, phos/dm*100]}, 
+                     index=["蛋白", "脂肪", "碳水", "磷"]).T.round(1), hide_index=True)
+    with col3:
+        st.caption("🔥 熱量比 (ME)")
+        st.markdown(f"蛋白 **{mep:.1f}%** | 脂肪 **{mef:.1f}%** | 碳水 **{mec:.1f}%**")
+        st.progress(int(mep))
+        st.progress(int(mef))
+        st.progress(int(mec))
 
-elif mode == "兩種乾糧 + 濕糧":
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        d1_b = st.selectbox("乾糧A", get_brand_options(dry_foods))
-        d1_f = st.selectbox("口味A", get_flavor_options(dry_foods, d1_b))
-        d1_row = get_food_row_by_brand_flavor(dry_foods, d1_b, d1_f)
-    with c2:
-        d2_b = st.selectbox("乾糧B", get_brand_options(dry_foods))
-        d2_f = st.selectbox("口味B", get_flavor_options(dry_foods, d2_b))
-        d2_row = get_food_row_by_brand_flavor(dry_foods, d2_b, d2_f)
-    with c3:
-        w_b = st.selectbox("濕糧", get_brand_options(wet_foods))
-        w_f = st.selectbox("口味", get_flavor_options(wet_foods, w_b))
-        w_row = get_food_row_by_brand_flavor(wet_foods, w_b, w_f)
-
-    if all([d1_row is not None, d2_row is not None, w_row is not None]):
-        wet_g = st.number_input("每日濕糧 (g)", value=80.0, step=10.0)
-        ratio = st.slider(f"{d1_b} 佔乾糧比例 (%)", 0, 100, 50)
-        
-        provided = (wet_g * w_row['熱量(kcal/100g)']) / 100
-        remain = der - provided
-        
-        if remain < 0:
-            st.error("濕糧熱量已超標！")
-        else:
-            alpha = ratio / 100
-            avg_k = alpha * d1_row['熱量(kcal/100g)'] + (1-alpha) * d2_row['熱量(kcal/100g)']
-            total_dry = (remain * 100) / avg_k if avg_k > 0 else 0
-            
-            st.success(f"濕糧：**{wet_g:.1f}g**\n乾糧A：**{total_dry*alpha:.1f}g**\n乾糧B：**{total_dry*(1-alpha):.1f}g**")
-
-st.markdown("---")
-# 按鈕前往貓糧資料庫
-if st.button("👉 查詢貓糧營養資料庫 (乾物比/ME)", type="primary", use_container_width=True):
-    st.switch_page("pages/2_nutrition.py")
-
-st.caption("📌 極速版：資料讀取自本地 CSV。")
+# ==========================================
+# 5. 功能 C: 資料管理
+# ==========================================
+elif page == "🛠️ 資料管理":
+    st.title("🛠️ 資料管理")
+    st.info("修改後請下載 CSV 並上傳回 GitHub。")
+    
+    t1, t2 = st.tabs(["乾糧", "濕糧"])
+    with t1:
+        ed = st.data_editor(dry_foods, num_rows="dynamic", use_container_width=True, key="ed1")
+        st.download_button("📥 下載 dry_food.csv", ed.to_csv(index=False).encode('utf-8'), "dry_food.csv", "text/csv")
+    with t2:
+        ew = st.data_editor(wet_foods, num_rows="dynamic", use_container_width=True, key="ed2")
+        st.download_button("📥 下載 wet_food.csv", ew.to_csv(index=False).encode('utf-8'), "wet_food.csv", "text/csv")
