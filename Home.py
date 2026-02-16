@@ -1,17 +1,25 @@
 import streamlit as st
 import pandas as pd
 
-# 設定網頁標題 (必須在第一行)
-st.set_page_config(page_title="貓咪全方位助手", layout="wide", page_icon="🐱")
+# ==========================================
+# 👇 這裡設定你的 Icon
+# page_icon 可以是 emoji "🐱" 也可以是圖檔路徑 "icon.png"
+# ==========================================
+st.set_page_config(
+    page_title="貓咪全方位助手", 
+    layout="wide", 
+    page_icon="icon.png"  # 👈 關鍵：這裡填你的圖片檔名
+)
 
 # ==========================================
-# 1. 資料讀取 (全域共用，只讀一次)
+# 👇 讀取 GitHub 上的 CSV (Cloud 模式)
 # ==========================================
 @st.cache_data(ttl=600)
 def load_data():
     dry = pd.DataFrame()
     wet = pd.DataFrame()
     try:
+        # 在 Streamlit Cloud 上，直接讀取同目錄下的檔案即可
         dry = pd.read_csv("dry_food.csv")
         wet = pd.read_csv("wet_food.csv")
         
@@ -24,10 +32,11 @@ def load_data():
                 for c in cols:
                     if c in df.columns:
                         df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
-    except:
-        pass
+    except Exception as e:
+        st.error(f"讀取失敗: {e}")
     return dry, wet
 
+# ... (後面的程式碼完全不用改，照舊即可) ...
 # 初始化 Session State
 if 'dry_foods' not in st.session_state:
     d, w = load_data()
