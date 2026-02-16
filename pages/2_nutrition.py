@@ -14,14 +14,14 @@ st.title("📚 貓糧營養資料庫")
 # ---------- 1. 資料讀取函數 ----------
 @st.cache_data(ttl=600)
 def load_food_data():
-    dry_data = pd.DataFrame()
-    wet_data = pd.DataFrame()
     try:
-        from pyodide.http import open_url
-        if DRY_FOOD_URL.startswith("http"):
-            dry_data = pd.read_csv(open_url(DRY_FOOD_URL))
-        if WET_FOOD_URL.startswith("http"):
-            wet_data = pd.read_csv(open_url(WET_FOOD_URL))
+        # 直接讀檔
+        dry_data = pd.read_csv("dry_food.csv")
+        wet_data = pd.read_csv("wet_food.csv")
+        # ... (後面的清理邏輯一樣)
+        return dry_data, wet_data
+    except:
+        return pd.DataFrame(), pd.DataFrame()
             
         # 資料清理
         for df in [dry_data, wet_data]:
