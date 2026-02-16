@@ -1,18 +1,17 @@
 import streamlit as st
 import pandas as pd
-# ❌ 移除這行: import plotly.graph_objects as go 
 
 # ==========================================
 # 👇 請在這裡貼上你的 CSV 連結
 # ==========================================
-DRY_FOOD_URL = "請貼上_乾糧_的_CSV_連結"
-WET_FOOD_URL = "請貼上_濕糧_的_CSV_連結"
+DRY_FOOD_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRE1dBL2TM_Jri1hjAAoRKsVwEz8C17Qz8S4V_287IvZW01nSxFsKH2UcFFv1TomIQFoKc49Lmmb-zq/pub?gid=0&single=true&output=csv"
+WET_FOOD_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRE1dBL2TM_Jri1hjAAoRKsVwEz8C17Qz8S4V_287IvZW01nSxFsKH2UcFFv1TomIQFoKc49Lmmb-zq/pub?gid=1528481875&single=true&output=csv"
 # ==========================================
 
 st.set_page_config(page_title="貓糧營養資料庫", layout="wide")
 st.title("📚 貓糧營養資料庫")
 
-# ---------- 資料讀取函數 ----------
+# ---------- 1. 資料讀取函數 ----------
 @st.cache_data(ttl=600)
 def load_food_data():
     dry_data = pd.DataFrame()
@@ -35,7 +34,7 @@ def load_food_data():
                         df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
         return dry_data, wet_data
     except Exception:
-        # 本地測試用
+        # 本地測試用 (如果不使用 stlite)
         try:
             if DRY_FOOD_URL.startswith("http"): dry_data = pd.read_csv(DRY_FOOD_URL)
             if WET_FOOD_URL.startswith("http"): wet_data = pd.read_csv(WET_FOOD_URL)
@@ -45,11 +44,12 @@ def load_food_data():
 
 dry_foods, wet_foods = load_food_data()
 
+# 檢查是否有資料
 if dry_foods.empty and wet_foods.empty:
-    st.warning("⚠️ 讀取不到資料，請檢查 CSV 連結")
+    st.warning("⚠️ 讀取不到資料，請檢查程式碼最上方的 CSV 連結是否正確。")
     st.stop()
 
-# ---------- 側邊欄篩選 ----------
+# ---------- 2. 側邊欄篩選 ----------
 with st.sidebar:
     st.header("🔍 篩選條件")
     food_type = st.radio("選擇種類", ["乾糧", "濕糧"])
@@ -64,9 +64,10 @@ with st.sidebar:
     all_flavors = sorted(brand_df['口味'].unique())
     selected_flavor = st.selectbox("選擇口味", all_flavors)
 
+# 取得選定的那一行資料
 row = brand_df[brand_df['口味'] == selected_flavor].iloc[0]
 
-# ---------- 核心計算 ----------
+# ---------- 3. 核心數值計算 ----------
 moisture = row.get('水分(%)', 0)
 protein = row.get('蛋白質(%)', 0)
 fat = row.get('脂肪(%)', 0)
@@ -77,7 +78,7 @@ phos = row.get('磷(%)', 0)
 cal = row.get('鈣(%)', 0)
 kcal_per_100g = row.get('熱量(kcal/100g)', 0)
 
-# 計算乾物比
+# 計算乾物比 (DM)
 dm = 100 - moisture
 if dm <= 0: dm = 1
 dm_p = (protein / dm) * 100
@@ -98,9 +99,10 @@ me_c = (kc / total_k * 100) if total_k > 0 else 0
 
 ca_p_ratio = f"{cal/phos:.2f} : 1" if phos > 0 else "N/A"
 
-# ---------- 顯示介面 (無 Plotly 版) ----------
+# ---------- 4. 顯示介面 (無 Plotly 版) ----------
 st.header(f"{selected_brand} - {selected_flavor}")
 
+# ⚠️ 關鍵：這裡必須先定義 col1, col2, col3，後面才能用 with col3
 col1, col2, col3 = st.columns(3)
 
 with col1:
@@ -121,7 +123,6 @@ with col3:
     st.subheader("🔥 熱量佔比 (ME)")
     st.caption("熱量來源分佈")
     
-    # 使用 Streamlit 原生進度條代替圓餅圖 (速度極快)
     st.markdown(f"**蛋白質 {me_p:.1f}%**")
     st.progress(min(int(me_p), 100))
     
