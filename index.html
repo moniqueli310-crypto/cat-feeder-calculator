@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    
+    <title>貓咪全方位助手</title>
+    
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/png" href="./icon.png" />
+    <link rel="apple-touch-icon" href="./icon.png" />
+    <meta name="theme-color" content="#ff9900" />
+
+    <script src="https://cdn.jsdelivr.net/npm/@stlite/mountable@0.50.0/build/stlite.js"></script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      stlite.mount({
+        // 只需要 pandas，保持輕量
+        requirements: ["pandas"], 
+        
+        // 指定主程式
+        entrypoint: "Home.py",
+        
+        // 掛載所有本地檔案
+        files: {
+          "Home.py": {
+            url: "./Home.py",
+          },
+          "dry_food.csv": {
+            url: "./dry_food.csv",
+          },
+          "wet_food.csv": {
+            url: "./wet_food.csv",
+          },
+          // 如果你有 manifest.json，建議都列埋入嚟
+          "manifest.json": {
+            url: "./manifest.json",
+          }
+        },
+      }, document.getElementById("root"));
+    </script>
+  </body>
+</html>
