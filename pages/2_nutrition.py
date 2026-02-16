@@ -1,29 +1,22 @@
 import streamlit as st
 import pandas as pd
 
-# ==========================================
-# 👇 請在這裡貼上你的 CSV 連結
-# ==========================================
-DRY_FOOD_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRE1dBL2TM_Jri1hjAAoRKsVwEz8C17Qz8S4V_287IvZW01nSxFsKH2UcFFv1TomIQFoKc49Lmmb-zq/pub?gid=0&single=true&output=csv"
-WET_FOOD_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRE1dBL2TM_Jri1hjAAoRKsVwEz8C17Qz8S4V_287IvZW01nSxFsKH2UcFFv1TomIQFoKc49Lmmb-zq/pub?gid=1528481875&single=true&output=csv"
-# ==========================================
-
 st.set_page_config(page_title="貓糧營養資料庫", layout="wide")
 st.title("📚 貓糧營養資料庫")
 
-# ---------- 1. 資料讀取函數 ----------
+# ---------- 資料讀取函數 (本地極速版) ----------
 @st.cache_data(ttl=600)
 def load_food_data():
+    dry_data = pd.DataFrame()
+    wet_data = pd.DataFrame()
+    
     try:
-        # 直接讀檔
+        # 直接讀取本地檔案 (因為你在 index.html 設定了 files)
+        # 這裡不需要 pyodide.http，也不需要複雜的 try...except 順序
         dry_data = pd.read_csv("dry_food.csv")
         wet_data = pd.read_csv("wet_food.csv")
-        # ... (後面的清理邏輯一樣)
-        return dry_data, wet_data
-    except:
-        return pd.DataFrame(), pd.DataFrame()
             
-        # 資料清理
+        # 資料清理與轉型
         for df in [dry_data, wet_data]:
             if not df.empty:
                 df.columns = df.columns.str.strip()
@@ -32,24 +25,22 @@ def load_food_data():
                 for c in cols:
                     if c in df.columns:
                         df[c] = pd.to_numeric(df[c], errors='coerce').fillna(0)
+                        
         return dry_data, wet_data
-    except Exception:
-        # 本地測試用 (如果不使用 stlite)
-        try:
-            if DRY_FOOD_URL.startswith("http"): dry_data = pd.read_csv(DRY_FOOD_URL)
-            if WET_FOOD_URL.startswith("http"): wet_data = pd.read_csv(WET_FOOD_URL)
-            return dry_data, wet_data
-        except:
-            return pd.DataFrame(), pd.DataFrame()
+        
+    except Exception as e:
+        # 這裡只用一個 except Exception 抓取所有錯誤，避免 SyntaxError
+        st.error(f"讀取資料失敗: {e}")
+        return pd.DataFrame(), pd.DataFrame()
 
 dry_foods, wet_foods = load_food_data()
 
 # 檢查是否有資料
 if dry_foods.empty and wet_foods.empty:
-    st.warning("⚠️ 讀取不到資料，請檢查程式碼最上方的 CSV 連結是否正確。")
+    st.warning("⚠️ 讀取不到資料。請確認 dry_food.csv 和 wet_food.csv 已上傳到 GitHub，且 index.html 有設定 files。")
     st.stop()
 
-# ---------- 2. 側邊欄篩選 ----------
+# ---------- 側邊欄篩選 ----------
 with st.sidebar:
     st.header("🔍 篩選條件")
     food_type = st.radio("選擇種類", ["乾糧", "濕糧"])
@@ -67,7 +58,7 @@ with st.sidebar:
 # 取得選定的那一行資料
 row = brand_df[brand_df['口味'] == selected_flavor].iloc[0]
 
-# ---------- 3. 核心數值計算 ----------
+# ---------- 核心數值計算 ----------
 moisture = row.get('水分(%)', 0)
 protein = row.get('蛋白質(%)', 0)
 fat = row.get('脂肪(%)', 0)
@@ -99,10 +90,9 @@ me_c = (kc / total_k * 100) if total_k > 0 else 0
 
 ca_p_ratio = f"{cal/phos:.2f} : 1" if phos > 0 else "N/A"
 
-# ---------- 4. 顯示介面 (無 Plotly 版) ----------
+# ---------- 顯示介面 (無 Plotly 版) ----------
 st.header(f"{selected_brand} - {selected_flavor}")
 
-# ⚠️ 關鍵：這裡必須先定義 col1, col2, col3，後面才能用 with col3
 col1, col2, col3 = st.columns(3)
 
 with col1:
