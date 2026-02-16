@@ -6,8 +6,8 @@ import plotly.graph_objects as go
 # 👇 請在這裡再次貼上你的 Google Sheets CSV 連結
 # (為了確保直接開啟此頁面也能讀取資料，建議這邊也放連結)
 # ==========================================
-DRY_FOOD_URL = "請貼上_乾糧_的_CSV_連結"
-WET_FOOD_URL = "請貼上_濕糧_的_CSV_連結"
+DRY_FOOD_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRE1dBL2TM_Jri1hjAAoRKsVwEz8C17Qz8S4V_287IvZW01nSxFsKH2UcFFv1TomIQFoKc49Lmmb-zq/pub?gid=0&single=true&output=csv"
+WET_FOOD_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRE1dBL2TM_Jri1hjAAoRKsVwEz8C17Qz8S4V_287IvZW01nSxFsKH2UcFFv1TomIQFoKc49Lmmb-zq/pub?gid=1528481875&single=true&output=csv"
 # ==========================================
 
 st.set_page_config(page_title="貓糧營養資料庫", layout="wide")
