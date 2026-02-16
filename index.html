@@ -17,23 +17,11 @@
 
     <script>
       stlite.mount({
-        // ⚠️ 這裡告訴瀏覽器要安裝哪些 Python 套件
-        // 絕對不要寫 "gspread" 或 "oauth2client"
-        requirements: ["pandas"], 
-        
-        // 程式入口點
+        requirements: ["pandas"], // 保持輕量，只有 pandas
         entrypoint: "Home.py",
-        
-        // 檔案掛載設定 (告訴 stlite 去哪裡抓你的 Python 檔)
         files: {
-          "Home.py": {
-            url: "./Home.py",
-          },
-          "pages/2_nutrition.py": {
-            url: "./pages/2_nutrition.py",
-          },
-          "pages/3_manage.py": { url: "./pages/3_manage.py" },
-
+          "Home.py": { url: "./Home.py" },
+          // 👇 pages 都不用了，只要保留 CSV
           "dry_food.csv": { url: "./dry_food.csv" },
           "wet_food.csv": { url: "./wet_food.csv" },
         },
