@@ -1,7 +1,17 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
-
+with col3:
+    st.subheader("🔥 熱量佔比 (ME)")
+    
+    # 改用 Progress Bar 顯示 (輕量化)
+    st.caption(f"蛋白質: {me_p:.1f}%")
+    st.progress(int(me_p))
+    
+    st.caption(f"脂肪: {me_f:.1f}%")
+    st.progress(int(me_f))
+    
+    st.caption(f"碳水: {me_c:.1f}%")
+    st.progress(int(me_c))
 # ==========================================
 # 👇 請在這裡再次貼上你的 Google Sheets CSV 連結
 # (為了確保直接開啟此頁面也能讀取資料，建議這邊也放連結)
